@@ -99,13 +99,23 @@ namespace MeltPoolDG::LevelSet
       }
     else if (param.reinit.modeltype == ModelType::geometric)
       {
-        // Solve a nonlinear system instead of advancing in pseudo-time
-        reinit_operation->solve();
+        while (!time_iterator->is_finished())
+          {
+            time_iterator->print_me(scratch_data->get_pcout(1));
+            // Solve a nonlinear system instead of advancing in pseudo-time
+            reinit_operation->solve();
+            time_iterator->compute_next_time_increment();
 
-        time_iterator->compute_next_time_increment();
+            output_results(time_iterator->get_current_time_step_number(),
+                           time_iterator->get_current_time());
 
-        output_results(time_iterator->get_current_time_step_number(),
-                       time_iterator->get_current_time());
+            if (profiling_monitor && profiling_monitor->now())
+              {
+                profiling_monitor->print(scratch_data->get_pcout(1),
+                                         scratch_data->get_timer(),
+                                         scratch_data->get_mpi_comm());
+              }
+          }
       }
     else if (param.reinit.modeltype == ModelType::elliptic)
       {
