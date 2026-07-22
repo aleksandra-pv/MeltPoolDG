@@ -37,6 +37,10 @@ namespace MeltPoolDG::LevelSet
     number             tolerance      = reinit_data.elliptic.fix_point_iteration.tolerance;
     unsigned int       iter           = 0;
 
+    // necessary for mp-reinit testing
+    mesh_classifier->reclassify();
+    compute_intersected_quadrature();
+
     while (iter < max_iterations && relative_change_level_set > tolerance)
       {
         solve_one_iter();
