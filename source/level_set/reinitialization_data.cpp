@@ -16,18 +16,28 @@ namespace MeltPoolDG::LevelSet
                         "Penalty parameter for the enforcement of the initial position of the zero "
                         "level-set iso-surface during the elliptic reinitialization.",
                         dealii::Patterns::Double(0., std::numeric_limits<number>::max()));
+      prm.add_parameter(
+        "narrowband threshold",
+        narrowband_threshold,
+        "Threshold for the narrow band computation width (each side of the interface).",
+        dealii::Patterns::Double(0., std::numeric_limits<number>::max()));
+      prm.add_parameter(
+        "non_linear",
+        non_linear,
+        "Sets a flag if the elliptic reinitialization should be solved with analytical Newton-Raphson method.");
     }
-    prm.enter_subsection("fixed point iteration");
+    prm.enter_subsection("solver iteration");
     {
       prm.add_parameter("max n steps",
-                        fix_point_iteration.max_n_steps,
-                        "Sets the maximum number of fixed point iterations.");
+                        solver_iteration.max_n_steps,
+                        "Sets the maximum number of solver iterations.");
 
       prm.add_parameter("tolerance",
-                        fix_point_iteration.tolerance,
+                        solver_iteration.tolerance,
                         "Set the tolerance for reinitialization. If the maximum change of the "
                         "level set field exceeds the tolerance, reinitialization steps will be "
                         "performed.");
+      prm.add_parameter("theta", solver_iteration.theta);
       prm.leave_subsection();
     }
     prm.leave_subsection();

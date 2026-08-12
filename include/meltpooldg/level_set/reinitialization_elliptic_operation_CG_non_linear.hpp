@@ -5,9 +5,11 @@
 #include <meltpooldg/core/scratch_data.hpp>
 #include <meltpooldg/cut/util.hpp>
 #include <meltpooldg/level_set/normal_vector_operation.hpp>
-#include <meltpooldg/level_set/reinitialization_elliptic_operator.hpp>
+#include <meltpooldg/level_set/reinitialization_elliptic_operator_CG_non_linear.hpp>
 #include <meltpooldg/level_set/reinitialization_operation_base.hpp>
 #include <meltpooldg/linear_algebra/preconditioner.hpp>
+
+#include <limits>
 
 /**
  * @brief This operation solves the reinitialization problem for a CG- or DG-FEM-based discrete
@@ -31,7 +33,8 @@ namespace MeltPoolDG::LevelSet
    * @tparam number Floating point format type.
    */
   template <int dim, typename number>
-  class ReinitializationEllipticOperation : public ReinitializationOperationBase<dim, number>
+  class ReinitializationEllipticOperationNonLinear
+    : public ReinitializationOperationBase<dim, number>
   {
   public:
     using VectorType      = dealii::LinearAlgebra::distributed::Vector<number>;
@@ -48,11 +51,11 @@ namespace MeltPoolDG::LevelSet
      * @param reinit_quad_idx_in Index of the used quadrature object in @p scratch_data_in.
      * @param ls_dof_idx_in Index of the used dof-handler object in @p scratch_data_in for the level-set.
      */
-    ReinitializationEllipticOperation(const ScratchData<dim, dim, number> &scratch_data_in,
-                                      const ReinitializationData<number>  &reinit_data,
-                                      const unsigned int                   reinit_dof_idx_in,
-                                      const unsigned int                   reinit_quad_idx_in,
-                                      const unsigned int                   ls_dof_idx_in);
+    ReinitializationEllipticOperationNonLinear(const ScratchData<dim, dim, number> &scratch_data_in,
+                                               const ReinitializationData<number>  &reinit_data,
+                                               const unsigned int reinit_dof_idx_in,
+                                               const unsigned int reinit_quad_idx_in,
+                                               const unsigned int ls_dof_idx_in);
 
     /**
      * @brief Solve the elliptic reinitialization problem using fix point iteration.
@@ -139,6 +142,7 @@ namespace MeltPoolDG::LevelSet
     number
     get_relative_change_level_set() const;
 
+
   private:
     /**
      * @brief Compute the quadrature rules for the immersed phase boundaries.
@@ -181,9 +185,11 @@ namespace MeltPoolDG::LevelSet
     VectorType rhs;
     // level set field from the previous step: initial condition
     VectorType level_set_old;
+    // level set from the new solve iteration, used in relaxation
+    VectorType delta_level_set;
 
     /// Pointer to the elliptic reinitialization operator object
-    std::unique_ptr<ReinitializationEllipticOperator<dim, number>> reinit_operator;
+    std::unique_ptr<ReinitializationEllipticOperatorNonLinear<dim, number>> reinit_operator;
     /// Preconditioner for the linear solver
     Preconditioner<dim, VectorType, number> preconditioner;
 
