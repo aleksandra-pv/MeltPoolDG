@@ -318,7 +318,7 @@ namespace MeltPoolDG::Simulation::ReinitCircleHole
      * @param prm The parameter handler to which the parameters are added.
      */
     bool
-    add_simulation_specific_parameters(dealii::ParameterHandler &prm) override
+    add_case_specific_parameters(dealii::ParameterHandler &prm) override
     {
       prm.enter_subsection("simulation specific parameters");
       {
