@@ -15,15 +15,13 @@ namespace MeltPoolDG::LevelSet
 
   template <int dim, typename number>
   ReinitializationEllipticOperatorNonLinear<dim, number>::ReinitializationEllipticOperatorNonLinear(
-    const MeltPoolDG::ScratchData<dim, dim, number>                &scratch_data_in,
-    const ReinitializationData<number>                             &reinit_data_in,
-    const unsigned int                                              reinit_dof_idx_in,
-    const unsigned int                                              reinit_quad_idx_in,
-    const MappingInfoType                                          &mapping_info_surface_in,
-    const unsigned int                                              ls_dof_idx_in,
-    const std::shared_ptr<dealii::NonMatching::MeshClassifier<dim>> mesh_classifier_in)
-    : mesh_classifier(mesh_classifier_in)
-    , scratch_data(scratch_data_in)
+    const MeltPoolDG::ScratchData<dim, dim, number> &scratch_data_in,
+    const ReinitializationData<number>              &reinit_data_in,
+    const unsigned int                               reinit_dof_idx_in,
+    const unsigned int                               reinit_quad_idx_in,
+    const MappingInfoType                           &mapping_info_surface_in,
+    const unsigned int                               ls_dof_idx_in)
+    : scratch_data(scratch_data_in)
     , reinit_data(reinit_data_in)
     , reinit_quad_idx(reinit_quad_idx_in)
     , mapping_info_surface(mapping_info_surface_in)
@@ -268,23 +266,24 @@ namespace MeltPoolDG::LevelSet
     for (unsigned int lane = 0; lane < matrix_free.n_active_entries_per_cell_batch(cell_batch);
          ++lane)
       {
-        const auto active_cell_iterator = matrix_free.get_cell_iterator(cell_batch, lane);
+        interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
 
-        if (mesh_classifier->location_to_level_set(active_cell_iterator) ==
-            dealii::NonMatching::LocationToLevelSet::intersected)
-          {
-            interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
+        const auto q_indices = interface_penalty_surface.quadrature_point_indices();
 
-            interface_penalty_surface.evaluate(
-              StridedArrayView<const number, n_lanes>(&cell_eval.begin_dof_values()[0][lane],
-                                                      n_dofs_per_cell),
-              EvaluationFlags::values);
+        // this corresponds to the case that the cell is not cut by the interface, and thus no
+        // surface integral is computed
+        if (q_indices.begin() == q_indices.end())
+          continue;
 
-            interface_penalty_cell_operation(interface_penalty_surface,
-                                             interface_penalty,
-                                             lane,
-                                             penalty_coefficient);
-          }
+        interface_penalty_surface.evaluate(
+          StridedArrayView<const number, n_lanes>(&cell_eval.begin_dof_values()[0][lane],
+                                                  n_dofs_per_cell),
+          EvaluationFlags::values);
+
+        interface_penalty_cell_operation(interface_penalty_surface,
+                                         interface_penalty,
+                                         lane,
+                                         penalty_coefficient);
       }
 
     laplace_rhs_operation(cell_eval);
@@ -407,23 +406,24 @@ namespace MeltPoolDG::LevelSet
     for (unsigned int lane = 0; lane < matrix_free.n_active_entries_per_cell_batch(cell_batch);
          ++lane)
       {
-        const auto active_cell_iterator = matrix_free.get_cell_iterator(cell_batch, lane);
+        interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
 
-        if (mesh_classifier->location_to_level_set(active_cell_iterator) ==
-            dealii::NonMatching::LocationToLevelSet::intersected)
-          {
-            interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
+        const auto q_indices = interface_penalty_surface.quadrature_point_indices();
 
-            interface_penalty_surface.evaluate(
-              StridedArrayView<const number, n_lanes>(&cell_eval.begin_dof_values()[0][lane],
-                                                      n_dofs_per_cell),
-              EvaluationFlags::values);
+        // this corresponds to the case that the cell is not cut by the interface, and thus no
+        // surface integral is computed
+        if (q_indices.begin() == q_indices.end())
+          continue;
 
-            interface_penalty_cell_operation(interface_penalty_surface,
-                                             interface_penalty,
-                                             lane,
-                                             penalty_coefficient);
-          }
+        interface_penalty_surface.evaluate(
+          StridedArrayView<const number, n_lanes>(&cell_eval.begin_dof_values()[0][lane],
+                                                  n_dofs_per_cell),
+          EvaluationFlags::values);
+
+        interface_penalty_cell_operation(interface_penalty_surface,
+                                         interface_penalty,
+                                         lane,
+                                         penalty_coefficient);
       }
 
     laplace_lhs_operation(cell_eval, phi_old);

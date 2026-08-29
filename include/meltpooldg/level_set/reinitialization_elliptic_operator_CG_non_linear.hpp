@@ -11,8 +11,6 @@
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
 
-#include <deal.II/non_matching/mesh_classifier.h>
-
 #include <meltpooldg/core/operator_base.hpp>
 #include <meltpooldg/core/scratch_data.hpp>
 #include <meltpooldg/level_set/reinitialization_data.hpp>
@@ -61,16 +59,14 @@ namespace MeltPoolDG::LevelSet
      * @param reinit_quad_idx_in Index of the used quadrature object in @p scratch_data_in.
      * @param mapping_info_surface_in Mapping information for the interface surface.
      * @param ls_dof_idx_in       DOF handler index for the level set function.
-     * @param mesh_classifier_in  Shared pointer to the mesh classifier object containing information about cut cells.
      */
     ReinitializationEllipticOperatorNonLinear(
-      const MeltPoolDG::ScratchData<dim, dim, number>                &scratch_data_in,
-      const ReinitializationData<number>                             &reinit_data_in,
-      const unsigned int                                              reinit_dof_idx_in,
-      const unsigned int                                              reinit_quad_idx_in,
-      const MappingInfoType                                          &mapping_info_surface_in,
-      const unsigned int                                              ls_dof_idx_in,
-      const std::shared_ptr<dealii::NonMatching::MeshClassifier<dim>> mesh_classifier_in);
+      const MeltPoolDG::ScratchData<dim, dim, number> &scratch_data_in,
+      const ReinitializationData<number>              &reinit_data_in,
+      const unsigned int                               reinit_dof_idx_in,
+      const unsigned int                               reinit_quad_idx_in,
+      const MappingInfoType                           &mapping_info_surface_in,
+      const unsigned int                               ls_dof_idx_in);
 
 
     /**
@@ -153,11 +149,6 @@ namespace MeltPoolDG::LevelSet
     VectorType solution_old;
 
   private:
-    /// Mesh classifier, which contains information if a cell is inside or outside the physically
-    /// relevant region, or cut by the immersed boundary. It corresponds to the current level set
-    /// position.
-    std::shared_ptr<dealii::NonMatching::MeshClassifier<dim>> mesh_classifier;
-
     /**
      * @brief This evaluates the coefficient for the rhs integral.
      *

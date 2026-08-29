@@ -33,15 +33,13 @@ namespace MeltPoolDG::LevelSet
   template <typename number>
   struct ReinitializationEllipticData
   {
-    number penalty_parameter    = 0.;
-    number narrowband_threshold = std::numeric_limits<number>::max();
-    bool   non_linear           = false;
+    number penalty_parameter = 0.;
+    bool   non_linear        = false;
 
     struct SolverIterationData
     {
       unsigned int max_n_steps = 5;
       number       tolerance   = std::numeric_limits<number>::min();
-      number       theta       = 1.0;
     } solver_iteration;
 
     void

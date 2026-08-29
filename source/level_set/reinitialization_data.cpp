@@ -17,11 +17,6 @@ namespace MeltPoolDG::LevelSet
                         "level-set iso-surface during the elliptic reinitialization.",
                         dealii::Patterns::Double(0., std::numeric_limits<number>::max()));
       prm.add_parameter(
-        "narrowband threshold",
-        narrowband_threshold,
-        "Threshold for the narrow band computation width (each side of the interface).",
-        dealii::Patterns::Double(0., std::numeric_limits<number>::max()));
-      prm.add_parameter(
         "non_linear",
         non_linear,
         "Sets a flag if the elliptic reinitialization should be solved with analytical Newton-Raphson method.");
@@ -37,7 +32,6 @@ namespace MeltPoolDG::LevelSet
                         "Set the tolerance for reinitialization. If the maximum change of the "
                         "level set field exceeds the tolerance, reinitialization steps will be "
                         "performed.");
-      prm.add_parameter("theta", solver_iteration.theta);
       prm.leave_subsection();
     }
     prm.leave_subsection();
