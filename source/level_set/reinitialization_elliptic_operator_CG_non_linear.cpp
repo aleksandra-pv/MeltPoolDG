@@ -116,8 +116,10 @@ namespace MeltPoolDG::LevelSet
 
     const VectorizedArrayType one(1.0);
     const VectorizedArrayType eps(1e-8);
-    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
-      grad_norm, one, one / pow(grad_norm + eps, 3.0), one / (grad_norm + eps));
+    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                        one,
+                                                                        one / pow(grad_norm, 3.0),
+                                                                        one / (grad_norm));
   }
 
   template <int dim, typename number>
@@ -131,8 +133,10 @@ namespace MeltPoolDG::LevelSet
 
     const VectorizedArrayType one(1.0);
     const VectorizedArrayType eps(1e-8);
-    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
-      grad_norm, one, one / pow(grad_norm + eps, 3.0), one / (grad_norm + eps));
+    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                        one,
+                                                                        one / pow(grad_norm, 3.0),
+                                                                        one / (grad_norm));
   }
 
   template <int dim, typename number>
@@ -225,8 +229,10 @@ namespace MeltPoolDG::LevelSet
 
     const VectorizedArrayType one(1.0);
     const VectorizedArrayType eps(1e-8);
-    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
-      grad_norm, one, one - one / (grad_norm + eps), grad_norm - one);
+    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                        one,
+                                                                        one - one / (grad_norm),
+                                                                        grad_norm - one);
   }
 
   template <int dim, typename number>

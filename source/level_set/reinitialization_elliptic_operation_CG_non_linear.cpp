@@ -81,6 +81,8 @@ namespace MeltPoolDG::LevelSet
     reinit_operator->create_residual(rhs, level_set_old);
     rhs *= -1.0;
 
+    preconditioner.update();
+
     int iter = LinearSolver::solve<VectorType>(*reinit_operator,
                                                delta_level_set,
                                                rhs,
