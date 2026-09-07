@@ -374,10 +374,13 @@ namespace MeltPoolDG::LevelSet
     const bool elliptic_DG = param.reinit.modeltype == ModelType::elliptic and
                              param.reinit.fe.type == FiniteElementType::FE_DGQ;
 
-    scratch_data->build((param.reinit.fe.type == FiniteElementType::FE_DGQ or wetting_enabled) and
-                          not elliptic_DG /*boundary_face_integrals*/,
-                        param.reinit.fe.type == FiniteElementType::FE_DGQ /*inner face integrals*/,
-                        wetting_enabled or elliptic_DG /*normal_vectors*/);
+    // scratch_data->build((param.reinit.fe.type == FiniteElementType::FE_DGQ or wetting_enabled)
+    // and
+    //                       not elliptic_DG /*boundary_face_integrals*/,
+    //                     param.reinit.fe.type == FiniteElementType::FE_DGQ /*inner face
+    //                     integrals*/, wetting_enabled or elliptic_DG /*normal_vectors*/);
+
+    scratch_data->build(false, false, false);
 
     if (reinit_operation)
       reinit_operation->reinit();

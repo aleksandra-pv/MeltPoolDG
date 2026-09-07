@@ -81,24 +81,25 @@ namespace MeltPoolDG::LevelSet
       [&](const auto &, auto &, const auto &, auto /*face_range*/) { /*do nothing*/ },
 
       [&](const auto &matrix_free, auto &dst, const auto &src, auto face_range) {
-        FEFaceIntegrator<dim, 1, number> face_eval(matrix_free,
-                                                   true,
-                                                   this->dof_idx,
-                                                   reinit_quad_idx);
-        FEFaceIntegrator<dim, 1, number> phi_old(matrix_free, true, this->dof_idx, reinit_quad_idx);
+        /*         FEFaceIntegrator<dim, 1, number> face_eval(matrix_free,
+                                                           true,
+                                                           this->dof_idx,
+                                                           reinit_quad_idx);
+                FEFaceIntegrator<dim, 1, number> phi_old(matrix_free, true, this->dof_idx,
+           reinit_quad_idx);
 
-        for (unsigned int face_batch = face_range.first; face_batch < face_range.second;
-             ++face_batch)
-          {
-            face_eval.reinit(face_batch);
-            face_eval.read_dof_values(src);
-            phi_old.reinit(face_batch);
-            phi_old.read_dof_values_plain(solution_old);
+                for (unsigned int face_batch = face_range.first; face_batch < face_range.second;
+                     ++face_batch)
+                  {
+                    face_eval.reinit(face_batch);
+                    face_eval.read_dof_values(src);
+                    phi_old.reinit(face_batch);
+                    phi_old.read_dof_values_plain(solution_old);
 
-            lhs_face_operation(face_eval, phi_old);
+                    lhs_face_operation(face_eval, phi_old);
 
-            face_eval.distribute_local_to_global(dst);
-          }
+                    face_eval.distribute_local_to_global(dst);
+                  } */
       },
       dst,
       src,
@@ -112,14 +113,19 @@ namespace MeltPoolDG::LevelSet
     const FECellIntegrator<dim, n_components, number> &phi_old,
     const unsigned int                                 q_index) const
   {
-    const auto grad_norm = phi_old.get_gradient(q_index).norm();
-
+    const auto                grad_norm = phi_old.get_gradient(q_index).norm();
+    const VectorizedArrayType eps(1e-12);
     const VectorizedArrayType one(1.0);
-    const VectorizedArrayType eps(1e-8);
-    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
-                                                                        one,
-                                                                        one / pow(grad_norm, 3.0),
-                                                                        one / (grad_norm));
+    const VectorizedArrayType zero(0.0);
+
+    const auto derivative_for_nonzero_gradient =
+      compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                   one,
+                                                                   one / pow(grad_norm, 3.0),
+                                                                   one / grad_norm);
+
+    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
+      grad_norm, eps, derivative_for_nonzero_gradient, zero);
   }
 
   template <int dim, typename number>
@@ -129,14 +135,19 @@ namespace MeltPoolDG::LevelSet
     const FEFaceIntegrator<dim, n_components, number> &phi_old,
     const unsigned int                                 q_index) const
   {
-    const auto grad_norm = phi_old.get_gradient(q_index).norm();
-
+    const auto                grad_norm = phi_old.get_gradient(q_index).norm();
+    const VectorizedArrayType eps(1e-12);
     const VectorizedArrayType one(1.0);
-    const VectorizedArrayType eps(1e-8);
-    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
-                                                                        one,
-                                                                        one / pow(grad_norm, 3.0),
-                                                                        one / (grad_norm));
+    const VectorizedArrayType zero(0.0);
+
+    const auto derivative_for_nonzero_gradient =
+      compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                   one,
+                                                                   one / pow(grad_norm, 3.0),
+                                                                   one / grad_norm);
+
+    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
+      grad_norm, eps, derivative_for_nonzero_gradient, zero);
   }
 
   template <int dim, typename number>
@@ -228,7 +239,6 @@ namespace MeltPoolDG::LevelSet
     const auto grad_norm = phi_old.get_gradient(q_index).norm();
 
     const VectorizedArrayType one(1.0);
-    const VectorizedArrayType eps(1e-8);
     return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
                                                                         one,
                                                                         one - one / (grad_norm),
@@ -330,13 +340,14 @@ namespace MeltPoolDG::LevelSet
       },
       {},
       [&](auto &face_eval) {
-        FEFaceIntegrator<dim, 1, number> phi_old(matrix_free, true, this->dof_idx, reinit_quad_idx);
-        const unsigned int               cell_batch = face_eval.get_current_cell_index();
+        /*         FEFaceIntegrator<dim, 1, number> phi_old(matrix_free, true, this->dof_idx,
+           reinit_quad_idx); const unsigned int               cell_batch =
+           face_eval.get_current_cell_index();
 
-        phi_old.reinit(cell_batch);
-        phi_old.read_dof_values_plain(solution_old);
+                phi_old.reinit(cell_batch);
+                phi_old.read_dof_values_plain(solution_old);
 
-        lhs_face_operation(face_eval, phi_old);
+                lhs_face_operation(face_eval, phi_old); */
       },
       this->dof_idx,
       reinit_quad_idx);
@@ -376,13 +387,14 @@ namespace MeltPoolDG::LevelSet
       },
       {},
       [&](auto &face_eval) {
-        FEFaceIntegrator<dim, 1, number> phi_old(matrix_free, true, this->dof_idx, reinit_quad_idx);
-        const unsigned int               cell_batch = face_eval.get_current_cell_index();
+        /*         FEFaceIntegrator<dim, 1, number> phi_old(matrix_free, true, this->dof_idx,
+           reinit_quad_idx); const unsigned int               cell_batch =
+           face_eval.get_current_cell_index();
 
-        phi_old.reinit(cell_batch);
-        phi_old.read_dof_values_plain(solution_old);
+                phi_old.reinit(cell_batch);
+                phi_old.read_dof_values_plain(solution_old);
 
-        lhs_face_operation(face_eval, phi_old);
+                lhs_face_operation(face_eval, phi_old); */
       },
       this->dof_idx,
       reinit_quad_idx);

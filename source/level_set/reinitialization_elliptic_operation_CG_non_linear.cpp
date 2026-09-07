@@ -74,13 +74,14 @@ namespace MeltPoolDG::LevelSet
     const ScopedName         scope_n("solve");
     const TimerOutput::Scope scope_t(scratch_data.get_timer(), scope_n);
 
-    const bool ls_update_ghosts = !delta_level_set.has_ghost_elements();
-    if (ls_update_ghosts)
-      delta_level_set.update_ghost_values();
+    // const bool ls_update_ghosts = !delta_level_set.has_ghost_elements();
+    // if (ls_update_ghosts)
+    //   delta_level_set.update_ghost_values();
 
     reinit_operator->create_residual(rhs, level_set_old);
     rhs *= -1.0;
 
+    preconditioner.set_do_update_preconditioner(true);
     preconditioner.update();
 
     int iter = LinearSolver::solve<VectorType>(*reinit_operator,
@@ -91,8 +92,18 @@ namespace MeltPoolDG::LevelSet
                                                "reinitialization_operation");
 
     solution_level_set.add(1.0, delta_level_set);
-    solution_level_set.update_ghost_values();
     scratch_data.get_constraint(reinit_dof_idx).distribute(solution_level_set);
+    solution_level_set.update_ghost_values();
+
+    Journal::print_formatted_norm<number>(
+      scratch_data.get_pcout(2),
+      [&]() -> number { return rhs.l2_norm(); },
+      "RHS",
+      "reinitialization",
+      8 /*precision*/,
+      "l2 ",
+      1 /*extra_size*/
+    );
 
     VectorType delta_level_set(solution_level_set);
     delta_level_set -= level_set_old;

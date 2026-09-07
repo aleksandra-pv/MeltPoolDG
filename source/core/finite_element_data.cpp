@@ -61,7 +61,7 @@ namespace MeltPoolDG
   unsigned int
   FiniteElementData::get_n_q_points() const
   {
-    return degree + 1;
+    return degree + 3;
   }
 
   unsigned int
