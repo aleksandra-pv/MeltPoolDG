@@ -142,6 +142,9 @@ namespace MeltPoolDG::LevelSet
 
     level_set_old.copy_locally_owned_data_from(solution_level_set);
     level_set_old.update_ghost_values();
+
+    reinit_operator->solution_old.copy_locally_owned_data_from(level_set_old);
+    reinit_operator->solution_old.update_ghost_values();
   }
 
   template <int dim, typename number>
