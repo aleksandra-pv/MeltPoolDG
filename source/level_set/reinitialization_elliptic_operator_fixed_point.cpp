@@ -46,9 +46,11 @@ namespace MeltPoolDG::LevelSet
     zero_interface.update_ghost_values();
 
     if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
-      discontinuity_penalty = 10.0 * scratch_data.get_degree(ls_dof_idx) *
-                              scratch_data.get_degree(ls_dof_idx) /
-                              scratch_data.get_min_cell_size(ls_dof_idx);
+      {
+        discontinuity_penalty = 10.0 * scratch_data.get_degree(ls_dof_idx) *
+                                scratch_data.get_degree(ls_dof_idx) /
+                                scratch_data.get_min_cell_size(ls_dof_idx);
+      }
   }
 
   template <int dim, typename number>
@@ -213,9 +215,24 @@ namespace MeltPoolDG::LevelSet
     const auto grad_norm = phi_old.get_gradient(q_index).norm();
 
     const VectorizedArrayType one(1.0);
-    const VectorizedArrayType eps(1e-8);
-    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
-      grad_norm, one, one - one / (grad_norm + eps), grad_norm - one);
+    return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                        one,
+                                                                        one - one / grad_norm,
+                                                                        grad_norm - one);
+
+    /*     const auto                grad_norm = phi_old.get_gradient(q_index).norm();
+        const VectorizedArrayType eps(1e-2);
+        const VectorizedArrayType one(1.0);
+        const VectorizedArrayType zero(0.0);
+
+        const auto coeeficient_for_nonzero_gradient =
+          compare_and_apply_mask<dealii::SIMDComparison::greater_than>(grad_norm,
+                                                                       one,
+                                                                       one - one / grad_norm,
+                                                                       grad_norm - one);
+
+        return compare_and_apply_mask<dealii::SIMDComparison::greater_than>(
+          grad_norm, eps, coeeficient_for_nonzero_gradient, zero); */
   }
 
   template <int dim, typename number>

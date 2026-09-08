@@ -7,6 +7,7 @@
 #include "meltpooldg/utilities/vector_tools.hpp"
 #include <meltpooldg/level_set/reinitialization_elliptic_operation_CG_non_linear.hpp>
 #include <meltpooldg/linear_algebra/preconditioner_factory.hpp>
+#include <meltpooldg/utilities/eigenvalues.hpp>
 #include <meltpooldg/utilities/iteration_monitor.hpp>
 #include <meltpooldg/utilities/journal.hpp>
 #include <meltpooldg/utilities/scoped_name.hpp>
@@ -84,6 +85,34 @@ namespace MeltPoolDG::LevelSet
     preconditioner.set_do_update_preconditioner(true);
     preconditioner.update();
 
+    ///////////////////////////////////////////////
+    const auto eigenvalues = MeltPoolDG::estimate_eigenvalues_gmres(*reinit_operator, rhs, 80);
+
+    double lambda_min = std::numeric_limits<double>::max();
+    double lambda_max = 0.0;
+
+    for (const auto &lambda : eigenvalues)
+      {
+        const double a = std::abs(lambda);
+        if (std::isfinite(a) && a > 0.0)
+          {
+            lambda_min = std::min(lambda_min, a);
+            lambda_max = std::max(lambda_max, a);
+          }
+      }
+
+    const double condition_number = lambda_max / lambda_min;
+
+    Journal::print_formatted_norm<number>(scratch_data.get_pcout(2),
+                                          condition_number,
+                                          "κ",
+                                          "reinitialization",
+                                          8 /*precision*/,
+                                          "l2 ",
+                                          1 /*extra_size*/
+    );
+    ///////////////////////////////////////////////
+
     int iter = LinearSolver::solve<VectorType>(*reinit_operator,
                                                delta_level_set,
                                                rhs,
@@ -104,9 +133,6 @@ namespace MeltPoolDG::LevelSet
       "l2 ",
       1 /*extra_size*/
     );
-
-    VectorType delta_level_set(solution_level_set);
-    delta_level_set -= level_set_old;
 
     number delta_level_set_L2 =
       VectorTools::compute_norm<dim, number>(delta_level_set,
