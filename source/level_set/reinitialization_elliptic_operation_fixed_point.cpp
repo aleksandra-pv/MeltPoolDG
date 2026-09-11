@@ -73,6 +73,9 @@ namespace MeltPoolDG::LevelSet
 
     reinit_operator->create_rhs(rhs, level_set_old);
 
+    preconditioner.set_do_update_preconditioner(true);
+    preconditioner.update();
+
     int iter = LinearSolver::solve<VectorType>(*reinit_operator,
                                                solution_level_set,
                                                rhs,
