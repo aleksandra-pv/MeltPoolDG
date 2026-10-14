@@ -465,13 +465,13 @@ namespace MeltPoolDG::LevelSet
 
     VectorType &src = const_cast<VectorType &>(src_in);
 
-    dirichlet_constraint_values.resize(indices.size());
+    dirichlet_constraint_values_temp.resize(indices.size());
 
     for (unsigned int i = 0; i < indices.size(); ++i)
       {
-        const unsigned int index       = indices[i];
-        dirichlet_constraint_values[i] = src.local_element(index);
-        src.local_element(index)       = number(0.0);
+        const unsigned int index            = indices[i];
+        dirichlet_constraint_values_temp[i] = src.local_element(index);
+        src.local_element(index)            = number(0.0);
       }
   }
 
@@ -484,7 +484,7 @@ namespace MeltPoolDG::LevelSet
     for (unsigned int i = 0; i < indices.size(); ++i)
       {
         const auto &index        = indices[i];
-        const auto &value        = dirichlet_constraint_values[i];
+        const auto &value        = dirichlet_constraint_values_temp[i];
         dst.local_element(index) = value;
       }
   }

@@ -148,7 +148,7 @@ namespace MeltPoolDG::LevelSet
 
     std::pair<std::vector<unsigned int>, std::vector<number>> dirichlet_constraints;
     // scratch buffer for the band entries of src during vmult()
-    mutable std::vector<number> dirichlet_constraint_values;
+    mutable std::vector<number> dirichlet_constraint_values_temp;
     bool                        do_apply_dirichlet_pre_post = true;
 
     /**
