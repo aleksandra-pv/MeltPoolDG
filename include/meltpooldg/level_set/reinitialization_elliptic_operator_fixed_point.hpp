@@ -117,6 +117,9 @@ namespace MeltPoolDG::LevelSet
     const std::vector<unsigned int> &
     get_dirichlet_constraint_indices() const;
 
+    void
+    create_dirichlet_constraints();
+
   private:
     void
     do_pre_vmult(const VectorType &src_in) const;
@@ -129,9 +132,6 @@ namespace MeltPoolDG::LevelSet
 
     std::vector<unsigned int>   dirichlet_constraint_indices;
     mutable std::vector<number> dirichlet_constraint_values;
-
-    void
-    create_dirichlet_constraints();
 
     /**
      * @brief Compute the contribution of a single cell integral to the right-hand side.

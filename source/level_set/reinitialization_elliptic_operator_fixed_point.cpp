@@ -60,24 +60,27 @@ namespace MeltPoolDG::LevelSet
 
     scratch_data.get_matrix_free().template loop<VectorType, VectorType>(
       [&](const auto &matrix_free, auto &dst, const auto &src, auto cell_range) {
-        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        FECellIntegrator<dim, 1, number> cell_eval(matrix_free, ls_dof_idx, reinit_quad_idx);
+
+        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
-        FECellIntegrator<dim, 1, number> cell_eval(matrix_free, ls_dof_idx, reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
-                                                      fe_point_level_set,
-                                                      0,
-                                                      true);
-
+                                                                   fe_point_level_set,
+                                                                   0,
+                                                                   true);
+ */
         for (unsigned int cell_batch = cell_range.first; cell_batch < cell_range.second;
              ++cell_batch)
           {
             cell_eval.reinit(cell_batch);
             cell_eval.read_dof_values(src);
 
-            lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+            /* lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
 
-            interface_penalty.distribute_local_to_global(dst);
+            interface_penalty.distribute_local_to_global(dst); */
+
+            laplace_cell_operation(cell_eval);
             cell_eval.distribute_local_to_global(dst);
           }
       },
@@ -280,7 +283,7 @@ namespace MeltPoolDG::LevelSet
       constraints,
       system_matrix,
       [&](auto &cell_eval) {
-        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
@@ -288,10 +291,11 @@ namespace MeltPoolDG::LevelSet
                                                       0,
                                                       true);
 
-        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface); */
+        laplace_cell_operation(cell_eval);
 
-        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i];
+        /* for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i]; */
       },
       [&](auto &eval_minus, auto &eval_plus) {
         if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
@@ -326,18 +330,19 @@ namespace MeltPoolDG::LevelSet
       matrix_free,
       diagonal,
       [&](auto &cell_eval) {
-        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
-                                                      fe_point_level_set,
-                                                      0,
-                                                      true);
+                                                                   fe_point_level_set,
+                                                                   0,
+                                                                   true);
 
-        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface); */
 
-        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i];
+        laplace_cell_operation(cell_eval);
+        /* for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i]; */
       },
       [&](auto &eval_minus, auto &eval_plus) {
         if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
