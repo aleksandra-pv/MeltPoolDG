@@ -56,7 +56,8 @@ namespace MeltPoolDG::LevelSet
   ReinitializationEllipticOperator<dim, number>::vmult(VectorType &dst, const VectorType &src) const
   {
     /// DIRICHLET BC
-    do_pre_vmult(src);
+    if (do_apply_dirichlet_pre_post)
+      do_pre_vmult(src);
 
     scratch_data.get_matrix_free().template loop<VectorType, VectorType>(
       [&](const auto &matrix_free, auto &dst, const auto &src, auto cell_range) {
@@ -124,7 +125,8 @@ namespace MeltPoolDG::LevelSet
       true);
 
     // DIRICHLET BC
-    do_post_vmult(dst);
+    if (do_apply_dirichlet_pre_post)
+      do_post_vmult(dst);
   }
 
   template <int dim, typename number>
@@ -209,7 +211,7 @@ namespace MeltPoolDG::LevelSet
           auto /*face_range*/) { /*do nothing*/ }, // boundary face loop
       dst,
       level_set_old,
-      true /*zero out dst*/);
+      false /*do not zero out dst: the lifting term -A*u_D is already stored in dst*/);
   }
 
   template <int dim, typename number>
@@ -367,7 +369,7 @@ namespace MeltPoolDG::LevelSet
       i = (std::abs(i) > 1.0e-14 * linfty_norm) ? (1.0 / i) : 1.0;
 
     /// DIRICHLET BC
-    for (const auto &i : dirichlet_constraint_indices)
+    for (const auto &i : dirichlet_constraints.first)
       diagonal.local_element(i) = 1.0;
   }
 
@@ -439,24 +441,35 @@ namespace MeltPoolDG::LevelSet
   }
 
   template <int dim, typename number>
-  const std::vector<unsigned int> &
-  ReinitializationEllipticOperator<dim, number>::get_dirichlet_constraint_indices() const
+  const std::pair<std::vector<unsigned int>, std::vector<number>> &
+  ReinitializationEllipticOperator<dim, number>::get_dirichlet_constraints() const
   {
-    return dirichlet_constraint_indices;
+    return dirichlet_constraints;
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::set_apply_dirichlet_pre_post(const bool enable)
+  {
+    do_apply_dirichlet_pre_post = enable;
   }
 
   template <int dim, typename number>
   void
   ReinitializationEllipticOperator<dim, number>::do_pre_vmult(const VectorType &src_in) const
   {
-    if (dirichlet_constraint_indices.size() == 0)
+    const auto &indices = dirichlet_constraints.first;
+
+    if (indices.size() == 0)
       return;
 
     VectorType &src = const_cast<VectorType &>(src_in);
 
-    for (unsigned int i = 0; i < dirichlet_constraint_indices.size(); ++i)
+    dirichlet_constraint_values.resize(indices.size());
+
+    for (unsigned int i = 0; i < indices.size(); ++i)
       {
-        const unsigned int index       = dirichlet_constraint_indices[i];
+        const unsigned int index       = indices[i];
         dirichlet_constraint_values[i] = src.local_element(index);
         src.local_element(index)       = number(0.0);
       }
@@ -466,9 +479,11 @@ namespace MeltPoolDG::LevelSet
   void
   ReinitializationEllipticOperator<dim, number>::do_post_vmult(VectorType &dst) const
   {
-    for (unsigned int i = 0; i < dirichlet_constraint_indices.size(); ++i)
+    const auto &indices = dirichlet_constraints.first;
+
+    for (unsigned int i = 0; i < indices.size(); ++i)
       {
-        const auto &index        = dirichlet_constraint_indices[i];
+        const auto &index        = indices[i];
         const auto &value        = dirichlet_constraint_values[i];
         dst.local_element(index) = value;
       }
@@ -476,10 +491,14 @@ namespace MeltPoolDG::LevelSet
 
   template <int dim, typename number>
   void
-  ReinitializationEllipticOperator<dim, number>::create_dirichlet_constraints()
+  ReinitializationEllipticOperator<dim, number>::create_dirichlet_constraints(
+    const VectorType &level_set)
   {
-    dirichlet_constraint_indices.clear();
-    dirichlet_constraint_values.clear();
+    auto &indices = dirichlet_constraints.first;
+    auto &values  = dirichlet_constraints.second;
+
+    indices.clear();
+    values.clear();
 
     const auto            &matrix_free = scratch_data.get_matrix_free();
     const auto            &partitioner = matrix_free.get_vector_partitioner(this->dof_idx);
@@ -513,14 +532,14 @@ namespace MeltPoolDG::LevelSet
                     partitioner->is_ghost_entry(global_index))
                   {
                     const unsigned int local_index = partitioner->global_to_local(global_index);
-                    dirichlet_constraint_indices.emplace_back(local_index);
+                    indices.emplace_back(local_index);
+                    values.emplace_back(level_set.local_element(local_index));
                   }
               }
           }
       }
 
-    dirichlet_constraint_values.resize(dirichlet_constraint_indices.size());
-    UtilityFunctions::remove_duplicates(dirichlet_constraint_indices, dirichlet_constraint_values);
+    UtilityFunctions::remove_duplicates(indices, values);
   }
 
   template <int dim, typename number>
@@ -528,12 +547,12 @@ namespace MeltPoolDG::LevelSet
   ReinitializationEllipticOperator<dim, number>::post_system_matrix_compute(
     TrilinosWrappers::SparseMatrix &system_matrix) const
   {
-    if (dirichlet_constraint_indices.size() == 0)
+    if (dirichlet_constraints.first.size() == 0)
       return;
 
     const auto &partitioner = scratch_data.get_matrix_free().get_vector_partitioner(this->dof_idx);
 
-    for (const auto &i : dirichlet_constraint_indices)
+    for (const auto &i : dirichlet_constraints.first)
       {
         const auto global_index = partitioner->local_to_global(i);
         system_matrix.clear_row(global_index, 1.0);

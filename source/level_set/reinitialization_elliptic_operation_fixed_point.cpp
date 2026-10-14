@@ -4,6 +4,7 @@
 
 #include <meltpooldg/level_set/reinitialization_elliptic_operation_fixed_point.hpp>
 #include <meltpooldg/linear_algebra/preconditioner_factory.hpp>
+#include <meltpooldg/linear_algebra/utilities_matrixfree.hpp>
 #include <meltpooldg/utilities/iteration_monitor.hpp>
 #include <meltpooldg/utilities/journal.hpp>
 #include <meltpooldg/utilities/scoped_name.hpp>
@@ -71,7 +72,23 @@ namespace MeltPoolDG::LevelSet
     if (ls_update_ghosts)
       solution_level_set.update_ghost_values();
 
-    reinit_operator->create_rhs(rhs, level_set_old);
+    const auto &dirichlet_bc = reinit_operator->get_dirichlet_constraints();
+
+    // rhs = b - A * u_D
+    reinit_operator->set_apply_dirichlet_pre_post(false);
+    Utilities::MatrixFree::create_rhs_and_apply_dirichlet_matrixfree<dim, number>(
+      *reinit_operator,
+      rhs,
+      level_set_old,
+      scratch_data,
+      reinit_dof_idx,
+      reinit_dof_idx /*no separate dof handler without BC*/,
+      true /*zero out rhs*/,
+      dirichlet_bc);
+    reinit_operator->set_apply_dirichlet_pre_post(true);
+
+    for (const auto i : dirichlet_bc.first)
+      solution_level_set.local_element(i) = 0.0;
 
     int iter = LinearSolver::solve<VectorType>(*reinit_operator,
                                                solution_level_set,
@@ -83,13 +100,8 @@ namespace MeltPoolDG::LevelSet
     if (reinit_data.fe.type != FiniteElementType::FE_DGQ)
       scratch_data.get_constraint(reinit_dof_idx).distribute(solution_level_set);
 
-    // Dirichlet BC
-    for (unsigned int i = 0; i < reinit_operator->get_dirichlet_constraint_indices().size(); ++i)
-      {
-        const auto local_index = reinit_operator->get_dirichlet_constraint_indices()[i];
-
-        solution_level_set.local_element(local_index) = level_set_old.local_element(local_index);
-      }
+    for (unsigned int i = 0; i < dirichlet_bc.first.size(); ++i)
+      solution_level_set.local_element(dirichlet_bc.first[i]) = dirichlet_bc.second[i];
 
     solution_level_set.update_ghost_values();
 
@@ -259,7 +271,7 @@ namespace MeltPoolDG::LevelSet
                                                  scratch_data.get_matrix_free(),
                                                  scratch_data.get_degree(ls_dof_idx));
 
-    reinit_operator->create_dirichlet_constraints();
+    reinit_operator->create_dirichlet_constraints(level_set_old);
   }
 
 
