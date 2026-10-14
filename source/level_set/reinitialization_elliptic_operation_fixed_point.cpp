@@ -83,6 +83,14 @@ namespace MeltPoolDG::LevelSet
     if (reinit_data.fe.type != FiniteElementType::FE_DGQ)
       scratch_data.get_constraint(reinit_dof_idx).distribute(solution_level_set);
 
+    // Dirichlet BC
+    for (unsigned int i = 0; i < reinit_operator->get_dirichlet_constraint_indices().size(); ++i)
+      {
+        const auto local_index = reinit_operator->get_dirichlet_constraint_indices()[i];
+
+        solution_level_set.local_element(local_index) = level_set_old.local_element(local_index);
+      }
+
     solution_level_set.update_ghost_values();
 
     VectorType delta_level_set(solution_level_set);
@@ -116,18 +124,6 @@ namespace MeltPoolDG::LevelSet
       "L2 ",
       1 /*extra_size*/
     );
-
-    Journal::print_formatted_norm<number>(scratch_data.get_pcout(2),
-                                          relative_change_level_set,
-                                          "|Δψ|/|ψ^n|",
-                                          "reinitialization",
-                                          8 /*precision*/,
-                                          "L2 ",
-                                          3 /*extra_size*/);
-
-    Journal::print_line(scratch_data.get_pcout(2),
-                        "LinearSolver completed in " + std::to_string(iter) + " iterations.",
-                        "reinitialization");
 
     IterationMonitor<number>::add_linear_iterations(scope_n, iter);
 
@@ -262,6 +258,8 @@ namespace MeltPoolDG::LevelSet
                                                  level_set_old,
                                                  scratch_data.get_matrix_free(),
                                                  scratch_data.get_degree(ls_dof_idx));
+
+    reinit_operator->create_dirichlet_constraints();
   }
 
 

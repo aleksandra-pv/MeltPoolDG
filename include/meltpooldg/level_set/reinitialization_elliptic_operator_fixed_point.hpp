@@ -114,8 +114,25 @@ namespace MeltPoolDG::LevelSet
     void
     compute_inverse_diagonal_from_matrixfree(VectorType &diagonal) const final;
 
+    const std::vector<unsigned int> &
+    get_dirichlet_constraint_indices() const;
 
   private:
+    void
+    do_pre_vmult(const VectorType &src_in) const;
+
+    void
+    do_post_vmult(VectorType &dst) const;
+
+    void
+    post_system_matrix_compute(dealii::TrilinosWrappers::SparseMatrix &system_matrix) const;
+
+    std::vector<unsigned int>   dirichlet_constraint_indices;
+    mutable std::vector<number> dirichlet_constraint_values;
+
+    void
+    create_dirichlet_constraints();
+
     /**
      * @brief Compute the contribution of a single cell integral to the right-hand side.
      *        First-level function for the evaluation of the volume integrals.

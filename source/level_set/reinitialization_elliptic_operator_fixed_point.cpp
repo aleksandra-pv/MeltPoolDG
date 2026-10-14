@@ -8,6 +8,7 @@
 #include <meltpooldg/utilities/utility_functions.hpp>
 #include <meltpooldg/utilities/vector_tools.hpp>
 
+#include <algorithm>
 #include <memory>
 
 namespace MeltPoolDG::LevelSet
@@ -54,6 +55,9 @@ namespace MeltPoolDG::LevelSet
   void
   ReinitializationEllipticOperator<dim, number>::vmult(VectorType &dst, const VectorType &src) const
   {
+    /// DIRICHLET BC
+    do_pre_vmult(src);
+
     scratch_data.get_matrix_free().template loop<VectorType, VectorType>(
       [&](const auto &matrix_free, auto &dst, const auto &src, auto cell_range) {
         FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
@@ -115,6 +119,9 @@ namespace MeltPoolDG::LevelSet
       dst,
       src,
       true);
+
+    // DIRICHLET BC
+    do_post_vmult(dst);
   }
 
   template <int dim, typename number>
@@ -302,6 +309,9 @@ namespace MeltPoolDG::LevelSet
       this->dof_idx,
       reinit_quad_idx,
       0 /* first selected component */);
+
+    /// DIRICHLET BC
+    post_system_matrix_compute(system_matrix);
   }
 
   template <int dim, typename number>
@@ -350,6 +360,10 @@ namespace MeltPoolDG::LevelSet
     const number linfty_norm = std::max(1.0, diagonal.linfty_norm());
     for (auto &i : diagonal)
       i = (std::abs(i) > 1.0e-14 * linfty_norm) ? (1.0 / i) : 1.0;
+
+    /// DIRICHLET BC
+    for (const auto &i : dirichlet_constraint_indices)
+      diagonal.local_element(i) = 1.0;
   }
 
   template <int dim, typename number>
@@ -416,6 +430,108 @@ namespace MeltPoolDG::LevelSet
 
         eval_minus.submit_gradient((-0.5) * phi_jump, q_index);
         eval_plus.submit_gradient((-0.5) * phi_jump, q_index);
+      }
+  }
+
+  template <int dim, typename number>
+  const std::vector<unsigned int> &
+  ReinitializationEllipticOperator<dim, number>::get_dirichlet_constraint_indices() const
+  {
+    return dirichlet_constraint_indices;
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::do_pre_vmult(const VectorType &src_in) const
+  {
+    if (dirichlet_constraint_indices.size() == 0)
+      return;
+
+    VectorType &src = const_cast<VectorType &>(src_in);
+
+    for (unsigned int i = 0; i < dirichlet_constraint_indices.size(); ++i)
+      {
+        const unsigned int index       = dirichlet_constraint_indices[i];
+        dirichlet_constraint_values[i] = src.local_element(index);
+        src.local_element(index)       = number(0.0);
+      }
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::do_post_vmult(VectorType &dst) const
+  {
+    for (unsigned int i = 0; i < dirichlet_constraint_indices.size(); ++i)
+      {
+        const auto &index        = dirichlet_constraint_indices[i];
+        const auto &value        = dirichlet_constraint_values[i];
+        dst.local_element(index) = value;
+      }
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::create_dirichlet_constraints()
+  {
+    dirichlet_constraint_indices.clear();
+    dirichlet_constraint_values.clear();
+
+    const auto            &matrix_free = scratch_data.get_matrix_free();
+    const auto            &partitioner = matrix_free.get_vector_partitioner(this->dof_idx);
+    constexpr unsigned int n_lanes     = VectorizedArray<number>::size();
+    PointEvaluationType    interface_penalty_surface(mapping_info_surface,
+                                                  fe_point_level_set,
+                                                  0,
+                                                  true);
+
+    for (unsigned int cell_batch = 0; cell_batch < matrix_free.n_cell_batches(); ++cell_batch)
+      {
+        for (unsigned int lane = 0; lane < matrix_free.n_active_entries_per_cell_batch(cell_batch);
+             ++lane)
+          {
+            interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
+            const auto q_indices = interface_penalty_surface.quadrature_point_indices();
+
+            // not a cut cell
+            if (q_indices.begin() == q_indices.end())
+              continue;
+
+            const auto cell = matrix_free.get_cell_iterator(cell_batch, lane, this->dof_idx);
+            std::vector<dealii::types::global_dof_index> global_dof_indices(n_dofs_per_cell);
+            cell->get_dof_indices(global_dof_indices);
+
+            for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+              {
+                const auto global_index = global_dof_indices[i];
+
+                if (partitioner->in_local_range(global_index) ||
+                    partitioner->is_ghost_entry(global_index))
+                  {
+                    const unsigned int local_index = partitioner->global_to_local(global_index);
+                    dirichlet_constraint_indices.emplace_back(local_index);
+                  }
+              }
+          }
+      }
+
+    dirichlet_constraint_values.resize(dirichlet_constraint_indices.size());
+    UtilityFunctions::remove_duplicates(dirichlet_constraint_indices, dirichlet_constraint_values);
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::post_system_matrix_compute(
+    TrilinosWrappers::SparseMatrix &system_matrix) const
+  {
+    if (dirichlet_constraint_indices.size() == 0)
+      return;
+
+    const auto &partitioner = scratch_data.get_matrix_free().get_vector_partitioner(this->dof_idx);
+
+    for (const auto &i : dirichlet_constraint_indices)
+      {
+        const auto global_index = partitioner->local_to_global(i);
+        system_matrix.clear_row(global_index, 1.0);
       }
   }
 
