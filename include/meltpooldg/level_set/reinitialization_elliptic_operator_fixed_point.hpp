@@ -114,8 +114,43 @@ namespace MeltPoolDG::LevelSet
     void
     compute_inverse_diagonal_from_matrixfree(VectorType &diagonal) const final;
 
+    /**
+     * @brief Local indices of the Dirichlet-constrained dofs (all dofs of cut cells) and the
+     *        values imposed there, i.e. the level set at the time of the last call to
+     *        create_dirichlet_constraints().
+     */
+    const std::pair<std::vector<unsigned int>, std::vector<number>> &
+    get_dirichlet_constraints() const;
+
+    /**
+     * @brief Collect the dofs of all cells intersected by the interface and store the
+     *        values of @p level_set at those dofs as Dirichlet data.
+     */
+    void
+    create_dirichlet_constraints(const VectorType &level_set);
+
+    /**
+     * @brief Enable/disable the pre/post treatment of the Dirichlet constraints in vmult().
+     *        Must be disabled while the lifting term A * u_D is computed.
+     */
+    void
+    set_apply_dirichlet_pre_post(const bool enable);
 
   private:
+    void
+    do_pre_vmult(const VectorType &src_in) const;
+
+    void
+    do_post_vmult(VectorType &dst) const;
+
+    void
+    post_system_matrix_compute(dealii::TrilinosWrappers::SparseMatrix &system_matrix) const;
+
+    std::pair<std::vector<unsigned int>, std::vector<number>> dirichlet_constraints;
+    // scratch buffer for the band entries of src during vmult()
+    mutable std::vector<number> dirichlet_constraint_values_temp;
+    bool                        do_apply_dirichlet_pre_post = true;
+
     /**
      * @brief Compute the contribution of a single cell integral to the right-hand side.
      *        First-level function for the evaluation of the volume integrals.

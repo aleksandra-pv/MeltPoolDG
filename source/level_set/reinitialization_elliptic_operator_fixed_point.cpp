@@ -8,6 +8,7 @@
 #include <meltpooldg/utilities/utility_functions.hpp>
 #include <meltpooldg/utilities/vector_tools.hpp>
 
+#include <algorithm>
 #include <memory>
 
 namespace MeltPoolDG::LevelSet
@@ -54,26 +55,33 @@ namespace MeltPoolDG::LevelSet
   void
   ReinitializationEllipticOperator<dim, number>::vmult(VectorType &dst, const VectorType &src) const
   {
+    /// DIRICHLET BC
+    if (do_apply_dirichlet_pre_post)
+      do_pre_vmult(src);
+
     scratch_data.get_matrix_free().template loop<VectorType, VectorType>(
       [&](const auto &matrix_free, auto &dst, const auto &src, auto cell_range) {
-        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        FECellIntegrator<dim, 1, number> cell_eval(matrix_free, ls_dof_idx, reinit_quad_idx);
+
+        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
-        FECellIntegrator<dim, 1, number> cell_eval(matrix_free, ls_dof_idx, reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
-                                                      fe_point_level_set,
-                                                      0,
-                                                      true);
-
+                                                                   fe_point_level_set,
+                                                                   0,
+                                                                   true);
+ */
         for (unsigned int cell_batch = cell_range.first; cell_batch < cell_range.second;
              ++cell_batch)
           {
             cell_eval.reinit(cell_batch);
             cell_eval.read_dof_values(src);
 
-            lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+            /* lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
 
-            interface_penalty.distribute_local_to_global(dst);
+            interface_penalty.distribute_local_to_global(dst); */
+
+            laplace_cell_operation(cell_eval);
             cell_eval.distribute_local_to_global(dst);
           }
       },
@@ -115,6 +123,10 @@ namespace MeltPoolDG::LevelSet
       dst,
       src,
       true);
+
+    // DIRICHLET BC
+    if (do_apply_dirichlet_pre_post)
+      do_post_vmult(dst);
   }
 
   template <int dim, typename number>
@@ -199,7 +211,7 @@ namespace MeltPoolDG::LevelSet
           auto /*face_range*/) { /*do nothing*/ }, // boundary face loop
       dst,
       level_set_old,
-      true /*zero out dst*/);
+      false /*do not zero out dst: the lifting term -A*u_D is already stored in dst*/);
   }
 
   template <int dim, typename number>
@@ -273,7 +285,7 @@ namespace MeltPoolDG::LevelSet
       constraints,
       system_matrix,
       [&](auto &cell_eval) {
-        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
@@ -281,10 +293,11 @@ namespace MeltPoolDG::LevelSet
                                                       0,
                                                       true);
 
-        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface); */
+        laplace_cell_operation(cell_eval);
 
-        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i];
+        /* for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i]; */
       },
       [&](auto &eval_minus, auto &eval_plus) {
         if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
@@ -302,6 +315,9 @@ namespace MeltPoolDG::LevelSet
       this->dof_idx,
       reinit_quad_idx,
       0 /* first selected component */);
+
+    /// DIRICHLET BC
+    post_system_matrix_compute(system_matrix);
   }
 
   template <int dim, typename number>
@@ -316,18 +332,19 @@ namespace MeltPoolDG::LevelSet
       matrix_free,
       diagonal,
       [&](auto &cell_eval) {
-        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
-                                                      fe_point_level_set,
-                                                      0,
-                                                      true);
+                                                                   fe_point_level_set,
+                                                                   0,
+                                                                   true);
 
-        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface); */
 
-        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i];
+        laplace_cell_operation(cell_eval);
+        /* for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i]; */
       },
       [&](auto &eval_minus, auto &eval_plus) {
         if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
@@ -350,6 +367,10 @@ namespace MeltPoolDG::LevelSet
     const number linfty_norm = std::max(1.0, diagonal.linfty_norm());
     for (auto &i : diagonal)
       i = (std::abs(i) > 1.0e-14 * linfty_norm) ? (1.0 / i) : 1.0;
+
+    /// DIRICHLET BC
+    for (const auto &i : dirichlet_constraints.first)
+      diagonal.local_element(i) = 1.0;
   }
 
   template <int dim, typename number>
@@ -416,6 +437,125 @@ namespace MeltPoolDG::LevelSet
 
         eval_minus.submit_gradient((-0.5) * phi_jump, q_index);
         eval_plus.submit_gradient((-0.5) * phi_jump, q_index);
+      }
+  }
+
+  template <int dim, typename number>
+  const std::pair<std::vector<unsigned int>, std::vector<number>> &
+  ReinitializationEllipticOperator<dim, number>::get_dirichlet_constraints() const
+  {
+    return dirichlet_constraints;
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::set_apply_dirichlet_pre_post(const bool enable)
+  {
+    do_apply_dirichlet_pre_post = enable;
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::do_pre_vmult(const VectorType &src_in) const
+  {
+    const auto &indices = dirichlet_constraints.first;
+
+    if (indices.size() == 0)
+      return;
+
+    VectorType &src = const_cast<VectorType &>(src_in);
+
+    dirichlet_constraint_values_temp.resize(indices.size());
+
+    for (unsigned int i = 0; i < indices.size(); ++i)
+      {
+        const unsigned int index            = indices[i];
+        dirichlet_constraint_values_temp[i] = src.local_element(index);
+        src.local_element(index)            = number(0.0);
+      }
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::do_post_vmult(VectorType &dst) const
+  {
+    const auto &indices = dirichlet_constraints.first;
+
+    for (unsigned int i = 0; i < indices.size(); ++i)
+      {
+        const auto &index        = indices[i];
+        const auto &value        = dirichlet_constraint_values_temp[i];
+        dst.local_element(index) = value;
+      }
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::create_dirichlet_constraints(
+    const VectorType &level_set)
+  {
+    auto &indices = dirichlet_constraints.first;
+    auto &values  = dirichlet_constraints.second;
+
+    indices.clear();
+    values.clear();
+
+    const auto            &matrix_free = scratch_data.get_matrix_free();
+    const auto            &partitioner = matrix_free.get_vector_partitioner(this->dof_idx);
+    constexpr unsigned int n_lanes     = VectorizedArray<number>::size();
+    PointEvaluationType    interface_penalty_surface(mapping_info_surface,
+                                                  fe_point_level_set,
+                                                  0,
+                                                  true);
+
+    for (unsigned int cell_batch = 0; cell_batch < matrix_free.n_cell_batches(); ++cell_batch)
+      {
+        for (unsigned int lane = 0; lane < matrix_free.n_active_entries_per_cell_batch(cell_batch);
+             ++lane)
+          {
+            interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
+            const auto q_indices = interface_penalty_surface.quadrature_point_indices();
+
+            // not a cut cell
+            if (q_indices.begin() == q_indices.end())
+              continue;
+
+            const auto cell = matrix_free.get_cell_iterator(cell_batch, lane, this->dof_idx);
+            std::vector<dealii::types::global_dof_index> global_dof_indices(n_dofs_per_cell);
+            cell->get_dof_indices(global_dof_indices);
+
+            for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+              {
+                const auto global_index = global_dof_indices[i];
+
+                if (partitioner->in_local_range(global_index) ||
+                    partitioner->is_ghost_entry(global_index))
+                  {
+                    const unsigned int local_index = partitioner->global_to_local(global_index);
+                    indices.emplace_back(local_index);
+                    values.emplace_back(level_set.local_element(local_index));
+                  }
+              }
+          }
+      }
+
+    UtilityFunctions::remove_duplicates(indices, values);
+  }
+
+  template <int dim, typename number>
+  void
+  ReinitializationEllipticOperator<dim, number>::post_system_matrix_compute(
+    TrilinosWrappers::SparseMatrix &system_matrix) const
+  {
+    if (dirichlet_constraints.first.size() == 0)
+      return;
+
+    const auto &partitioner = scratch_data.get_matrix_free().get_vector_partitioner(this->dof_idx);
+
+    for (const auto &i : dirichlet_constraints.first)
+      {
+        const auto global_index = partitioner->local_to_global(i);
+        system_matrix.clear_row(global_index, 1.0);
       }
   }
 
