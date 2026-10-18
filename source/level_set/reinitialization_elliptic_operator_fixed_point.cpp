@@ -63,25 +63,24 @@ namespace MeltPoolDG::LevelSet
       [&](const auto &matrix_free, auto &dst, const auto &src, auto cell_range) {
         FECellIntegrator<dim, 1, number> cell_eval(matrix_free, ls_dof_idx, reinit_quad_idx);
 
-        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
-                                                                   fe_point_level_set,
-                                                                   0,
-                                                                   true);
- */
+                                                      fe_point_level_set,
+                                                      0,
+                                                      true);
+
         for (unsigned int cell_batch = cell_range.first; cell_batch < cell_range.second;
              ++cell_batch)
           {
             cell_eval.reinit(cell_batch);
             cell_eval.read_dof_values(src);
 
-            /* lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+            lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+            interface_penalty.distribute_local_to_global(dst);
 
-            interface_penalty.distribute_local_to_global(dst); */
-
-            laplace_cell_operation(cell_eval);
+            // laplace_cell_operation(cell_eval);
             cell_eval.distribute_local_to_global(dst);
           }
       },
@@ -285,7 +284,7 @@ namespace MeltPoolDG::LevelSet
       constraints,
       system_matrix,
       [&](auto &cell_eval) {
-        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
@@ -293,11 +292,11 @@ namespace MeltPoolDG::LevelSet
                                                       0,
                                                       true);
 
-        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface); */
-        laplace_cell_operation(cell_eval);
+        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
+        // laplace_cell_operation(cell_eval);
 
-        /* for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i]; */
+        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i];
       },
       [&](auto &eval_minus, auto &eval_plus) {
         if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
@@ -332,19 +331,19 @@ namespace MeltPoolDG::LevelSet
       matrix_free,
       diagonal,
       [&](auto &cell_eval) {
-        /* FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
+        FECellIntegrator<dim, 1, number> interface_penalty(matrix_free,
                                                            this->dof_idx,
                                                            reinit_quad_idx);
         PointEvaluationType              interface_penalty_surface(mapping_info_surface,
-                                                                   fe_point_level_set,
-                                                                   0,
-                                                                   true);
+                                                      fe_point_level_set,
+                                                      0,
+                                                      true);
 
-        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface); */
+        lhs_cell_operation(interface_penalty, cell_eval, interface_penalty_surface);
 
-        laplace_cell_operation(cell_eval);
-        /* for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i]; */
+        // laplace_cell_operation(cell_eval);
+        for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+          cell_eval.begin_dof_values()[i] += interface_penalty.begin_dof_values()[i];
       },
       [&](auto &eval_minus, auto &eval_plus) {
         if (reinit_data.fe.type == FiniteElementType::FE_DGQ)
@@ -500,9 +499,10 @@ namespace MeltPoolDG::LevelSet
     indices.clear();
     values.clear();
 
-    const auto            &matrix_free = scratch_data.get_matrix_free();
-    const auto            &partitioner = matrix_free.get_vector_partitioner(this->dof_idx);
-    constexpr unsigned int n_lanes     = VectorizedArray<number>::size();
+    const auto            &matrix_free         = scratch_data.get_matrix_free();
+    const auto            &partitioner         = matrix_free.get_vector_partitioner(this->dof_idx);
+    const auto            &unit_support_points = fe_point_level_set.get_unit_support_points();
+    constexpr unsigned int n_lanes             = VectorizedArray<number>::size();
     PointEvaluationType    interface_penalty_surface(mapping_info_surface,
                                                   fe_point_level_set,
                                                   0,
@@ -526,6 +526,16 @@ namespace MeltPoolDG::LevelSet
 
             for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
               {
+                const auto dof_position =
+                  scratch_data.get_mapping().transform_unit_to_real_cell(cell,
+                                                                         unit_support_points[i]);
+
+                if (std::abs(dof_position[0]) >= 2.0e-5)
+                  continue;
+
+                if (std::abs(dof_position[1]) >= 8.9e-6)
+                  continue;
+
                 const auto global_index = global_dof_indices[i];
 
                 if (partitioner->in_local_range(global_index) ||
