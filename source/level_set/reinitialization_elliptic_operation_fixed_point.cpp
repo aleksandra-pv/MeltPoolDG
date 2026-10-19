@@ -133,6 +133,9 @@ namespace MeltPoolDG::LevelSet
 
     level_set_old.copy_locally_owned_data_from(solution_level_set);
     level_set_old.update_ghost_values();
+    reinit_operator->narrow_band_level_set.zero_out_ghost_values();
+    reinit_operator->narrow_band_level_set.copy_locally_owned_data_from(level_set_old);
+    reinit_operator->narrow_band_level_set.update_ghost_values();
   }
 
   template <int dim, typename number>
@@ -147,6 +150,7 @@ namespace MeltPoolDG::LevelSet
       create_operator();
 
     reinit_operator->reinit();
+    scratch_data.initialize_dof_vector(reinit_operator->narrow_band_level_set, ls_dof_idx);
     preconditioner.reinit();
   }
 
@@ -158,6 +162,10 @@ namespace MeltPoolDG::LevelSet
     level_set_old.zero_out_ghost_values();
     level_set_old.copy_locally_owned_data_from(solution_level_set_in);
     level_set_old.update_ghost_values();
+    reinit_operator->narrow_band_level_set.zero_out_ghost_values();
+    reinit_operator->narrow_band_level_set.copy_locally_owned_data_from(level_set_old);
+    reinit_operator->narrow_band_level_set.update_ghost_values();
+
 
     solution_level_set.zero_out_ghost_values();
     solution_level_set.copy_locally_owned_data_from(solution_level_set_in);
@@ -184,6 +192,10 @@ namespace MeltPoolDG::LevelSet
       scratch_data.get_constraint(ls_dof_idx).distribute(level_set_old);
 
     level_set_old.update_ghost_values();
+    reinit_operator->narrow_band_level_set.zero_out_ghost_values();
+    reinit_operator->narrow_band_level_set.copy_locally_owned_data_from(level_set_old);
+    reinit_operator->narrow_band_level_set.update_ghost_values();
+
 
     solution_level_set.zero_out_ghost_values();
     solution_level_set.copy_locally_owned_data_from(level_set_old);

@@ -16,6 +16,10 @@ namespace MeltPoolDG::LevelSet
                         "Penalty parameter for the enforcement of the initial position of the zero "
                         "level-set iso-surface during the elliptic reinitialization.",
                         dealii::Patterns::Double(0., std::numeric_limits<number>::max()));
+      prm.add_parameter("narrow band threshold",
+                        narrow_band_threshold,
+                        "Threshold for the narrow band width on each side of the interface.",
+                        dealii::Patterns::Double(0., std::numeric_limits<number>::max()));
       prm.add_parameter("nonlinear solver type",
                         nonlinear_solver_type,
                         "Sets the nonlinear solver used for elliptic reinitialization.",

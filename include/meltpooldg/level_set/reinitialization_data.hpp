@@ -35,6 +35,7 @@ namespace MeltPoolDG::LevelSet
   struct ReinitializationEllipticData
   {
     number      penalty_parameter               = 0.;
+    number      narrow_band_threshold           = std::numeric_limits<number>::max();
     std::string nonlinear_solver_type           = "fixed point";
     number      interior_penalty_scaling_factor = 10.;
 

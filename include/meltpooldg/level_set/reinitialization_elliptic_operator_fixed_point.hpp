@@ -114,6 +114,9 @@ namespace MeltPoolDG::LevelSet
     void
     compute_inverse_diagonal_from_matrixfree(VectorType &diagonal) const final;
 
+    /// Level-set field from the previous fixed-point iteration used to define the narrow band.
+    VectorType narrow_band_level_set;
+
 
   private:
     /**

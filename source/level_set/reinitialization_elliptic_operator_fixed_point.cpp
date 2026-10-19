@@ -2,6 +2,7 @@
 
 #include "meltpooldg/utilities/dealii_tensor.hpp"
 #include "meltpooldg/utilities/fe_integrator.hpp"
+#include <meltpooldg/level_set/level_set_tools.hpp>
 #include <meltpooldg/level_set/reinitialization_elliptic_operator_fixed_point.hpp>
 #include <meltpooldg/linear_algebra/utilities_matrixfree.hpp>
 #include <meltpooldg/time_integration/time_integrator_util.hpp>
@@ -123,9 +124,19 @@ namespace MeltPoolDG::LevelSet
     FECellIntegrator<dim, 1, number> &cell_eval) const
   {
     cell_eval.evaluate(EvaluationFlags::gradients);
+    FECellIntegrator<dim, 1, number> phi_old(scratch_data.get_matrix_free(),
+                                             ls_dof_idx,
+                                             reinit_quad_idx);
+    phi_old.reinit(cell_eval.get_current_cell_index());
+    phi_old.read_dof_values(narrow_band_level_set);
+    phi_old.evaluate(EvaluationFlags::values);
+
     for (unsigned int q_index = 0; q_index < cell_eval.n_q_points; q_index++)
       {
-        cell_eval.submit_gradient(cell_eval.get_gradient(q_index), q_index);
+        const auto narrow_band_mask =
+          Tools::compute_mask_narrow_band<number>(phi_old.get_value(q_index),
+                                                  reinit_data.elliptic.narrow_band_threshold);
+        cell_eval.submit_gradient(narrow_band_mask * cell_eval.get_gradient(q_index), q_index);
       }
 
     cell_eval.integrate(EvaluationFlags::gradients);
@@ -246,8 +257,12 @@ namespace MeltPoolDG::LevelSet
     for (unsigned int q_index = 0; q_index < rhs.n_q_points; q_index++)
       {
         const auto source_term = number(1.0) - evaluate_rhs_coefficient(phi_old, q_index);
+        const auto narrow_band_mask =
+          Tools::compute_mask_narrow_band<number>(phi_old.get_value(q_index),
+                                                  reinit_data.elliptic.narrow_band_threshold);
 
-        rhs.submit_gradient(source_term * phi_old.get_gradient(q_index), q_index);
+        rhs.submit_gradient(narrow_band_mask * source_term * phi_old.get_gradient(q_index),
+                            q_index);
       }
 
     rhs.integrate(EvaluationFlags::gradients);
