@@ -499,57 +499,60 @@ namespace MeltPoolDG::LevelSet
     indices.clear();
     values.clear();
 
-    const auto            &matrix_free         = scratch_data.get_matrix_free();
-    const auto            &partitioner         = matrix_free.get_vector_partitioner(this->dof_idx);
-    const auto            &unit_support_points = fe_point_level_set.get_unit_support_points();
-    constexpr unsigned int n_lanes             = VectorizedArray<number>::size();
+    const auto            &matrix_free = scratch_data.get_matrix_free();
+    const auto            &partitioner = matrix_free.get_vector_partitioner(this->dof_idx);
+    constexpr unsigned int n_lanes     = VectorizedArray<number>::size();
     PointEvaluationType    interface_penalty_surface(mapping_info_surface,
                                                   fe_point_level_set,
                                                   0,
                                                   true);
 
+    // Marker vector: 1 on every dof to be constrained. Using a distributed vector makes the
+    // constrained set consistent across ranks: a dof of a cut cell owned by another rank is
+    // marked here as a ghost entry, compress(add) transfers the mark to the owner and
+    // update_ghost_values() distributes the owner's decision back to all ranks.
+    VectorType marker;
+    scratch_data.initialize_dof_vector(marker, this->dof_idx);
+    marker = 0.0;
+
+    std::vector<dealii::types::global_dof_index> global_dof_indices(n_dofs_per_cell);
+
     for (unsigned int cell_batch = 0; cell_batch < matrix_free.n_cell_batches(); ++cell_batch)
-      {
-        for (unsigned int lane = 0; lane < matrix_free.n_active_entries_per_cell_batch(cell_batch);
-             ++lane)
-          {
-            interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
-            const auto q_indices = interface_penalty_surface.quadrature_point_indices();
+      for (unsigned int lane = 0; lane < matrix_free.n_active_entries_per_cell_batch(cell_batch);
+           ++lane)
+        {
+          interface_penalty_surface.reinit(cell_batch * n_lanes + lane);
+          const auto q_indices = interface_penalty_surface.quadrature_point_indices();
 
-            // not a cut cell
-            if (q_indices.begin() == q_indices.end())
-              continue;
+          // not a cut cell
+          if (q_indices.begin() == q_indices.end())
+            continue;
 
-            const auto cell = matrix_free.get_cell_iterator(cell_batch, lane, this->dof_idx);
-            std::vector<dealii::types::global_dof_index> global_dof_indices(n_dofs_per_cell);
-            cell->get_dof_indices(global_dof_indices);
+          const auto cell = matrix_free.get_cell_iterator(cell_batch, lane, this->dof_idx);
+          cell->get_dof_indices(global_dof_indices);
 
-            for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
-              {
-                const auto dof_position =
-                  scratch_data.get_mapping().transform_unit_to_real_cell(cell,
-                                                                         unit_support_points[i]);
+          for (unsigned int i = 0; i < n_dofs_per_cell; ++i)
+            {
+              const auto global_index = global_dof_indices[i];
 
-                if (std::abs(dof_position[0]) >= 2.0e-5)
-                  continue;
+              if (partitioner->in_local_range(global_index) ||
+                  partitioner->is_ghost_entry(global_index))
+                marker.local_element(partitioner->global_to_local(global_index)) = 1.0;
+            }
+        }
 
-                if (std::abs(dof_position[1]) >= 8.9e-6)
-                  continue;
+    marker.compress(dealii::VectorOperation::add);
+    marker.update_ghost_values();
 
-                const auto global_index = global_dof_indices[i];
-
-                if (partitioner->in_local_range(global_index) ||
-                    partitioner->is_ghost_entry(global_index))
-                  {
-                    const unsigned int local_index = partitioner->global_to_local(global_index);
-                    indices.emplace_back(local_index);
-                    values.emplace_back(level_set.local_element(local_index));
-                  }
-              }
-          }
-      }
-
-    UtilityFunctions::remove_duplicates(indices, values);
+    // collect the consistent set over locally owned and ghost entries
+    const unsigned int n_local_entries =
+      partitioner->locally_owned_size() + partitioner->n_ghost_indices();
+    for (unsigned int i = 0; i < n_local_entries; ++i)
+      if (marker.local_element(i) > 0.5)
+        {
+          indices.emplace_back(i);
+          values.emplace_back(level_set.local_element(i));
+        }
   }
 
   template <int dim, typename number>
